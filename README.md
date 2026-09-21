@@ -1,4 +1,3 @@
-# 🛡️ SMTP / TLS Security Auditor
 # 🛡️ SMTP / TLS & Web Security Auditor
 
 Una herramienta automatizada en Python para auditoría de ciberseguridad perimetral y de dominios de correo. Este script evalúa la postura criptográfica de servidores SMTP, los registros DNS de protección anti-spoofing, la navegación web segura (HTTPS), las cabeceras defensivas y la salud de los certificados digitales, generando un informe ejecutivo unificado en PDF con gráficos integrados.
@@ -48,7 +47,7 @@ pip install dnspython pandas matplotlib fpdf2
    python generador_reporte_tls.py
    ```
 
-4. **View the Results:** Open the generated `reporte_seguridad_smtp.html` file in any modern web browser to view the security score distribution and detailed compliance table.
+4. **View the Results:** Open the generated `reporte_seguridad_smtp.html` or `reporte_seguridad_smtp.pdf` file in any modern web browser to view the security score distribution and detailed compliance table.
 
 
 
