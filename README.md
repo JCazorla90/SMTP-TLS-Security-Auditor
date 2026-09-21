@@ -17,7 +17,7 @@ A Python-based, automated security auditing tool for email domains. This script 
 The tool requires Python 3.7+ and the following libraries. You can install them using `pip`:
 
 ```bash
-pip install dnspython pandas matplotlib jinja2
+pip install dnspython pandas matplotlib jinja2 pdfkit
 ```
 
 ## ⚙️ Usage
