@@ -4,14 +4,31 @@ import dns.resolver
 import pandas as pd
 import matplotlib.pyplot as plt
 import base64
+import os
 from io import BytesIO
 from datetime import datetime
 
-# Configuración de Dominios a evaluar
-DOMAINS = [
-    "chase.com", "jpmorgan.com", "repsol.com", "bear.com"
-]
+# ==============================================================================
+# CONFIGURACIÓN: Carga dinámica para evitar hardcodeo (Cumplimiento Arquitectura)
+# ==============================================================================
+def cargar_dominios(ruta_fichero="dominios.txt"):
+    """
+    Lee la lista de dominios desde un archivo externo.
+    Cumple con la normativa que prohíbe configuraciones estáticas en el código.
+    """
+    if not os.path.exists(ruta_fichero):
+        raise FileNotFoundError(
+            f"Error: No se encontró el archivo '{ruta_fichero}'. "
+            "Crea este archivo e incluye un dominio por línea."
+        )
+    
+    with open(ruta_fichero, 'r') as archivo:
+        # Extrae líneas ignorando espacios en blanco y líneas vacías
+        return [linea.strip() for linea in archivo if linea.strip()]
 
+# ==============================================================================
+# MÓDULOS DE AUDITORÍA CIBERSEGURIDAD
+# ==============================================================================
 def check_dns_records(domain, record_type):
     """Consulta registros DNS específicos (MX, TXT para SPF/DMARC)"""
     try:
@@ -51,10 +68,10 @@ def generate_security_data(domains):
         dmarc_records = check_dns_records(f"_dmarc.{domain}", 'TXT')
         dmarc_pass = any("v=DMARC1" in txt for txt in dmarc_records)
         
-        # 2. Análisis Criptográfico SMTP (Cumplimiento Arquitectura)
+        # 2. Análisis Criptográfico SMTP
         proto, cipher, bits = evaluate_smtp_tls(mx_host) if mx_host else ("N/A", "N/A", 0)
         
-        # 3. Evaluación de Cumplimiento (Scoring simple)
+        # 3. Evaluación de Cumplimiento (Scoring Arquitectura Corporativa)
         # Cumple si: TLS 1.2/1.3 + >= 256 bits (AES-256) + SPF + DMARC
         tls_compliant = proto in ["TLSv1.2", "TLSv1.3"]
         bits_compliant = bits >= 256
@@ -78,6 +95,9 @@ def generate_security_data(domains):
     
     return pd.DataFrame(results)
 
+# ==============================================================================
+# GENERACIÓN DE REPORTES (DASHBOARD)
+# ==============================================================================
 def create_dashboard(df):
     """Genera gráficos en base64 para embeber en HTML"""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -119,7 +139,7 @@ def export_html_report(df, image_base64):
         </style>
     </head>
     <body>
-        <h1>Auditoría de Seguridad de Dominios (Estilo BitSight)</h1>
+        <h1>Auditoría de Seguridad de Dominios</h1>
         <p><strong>Fecha de escaneo:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         
         <div class="chart">
@@ -130,7 +150,7 @@ def export_html_report(df, image_base64):
         {df.to_html(index=False, classes='table', escape=False)}
         
         <div class="footer">
-            <p>Elaborado bajo normativa de Arquitectura de Seguridad corporativa: Validación de TLS 1.2/1.3, longitud de clave mínima y cipher suites robustas (AES-256).</p>
+            <p>Elaborado bajo normativa de Arquitectura corporativa: Validación de TLS 1.2/1.3 y cipher suites robustas (AES-256).</p>
         </div>
     </body>
     </html>
@@ -140,6 +160,16 @@ def export_html_report(df, image_base64):
     print("Reporte generado exitosamente: reporte_seguridad_smtp.html")
 
 if __name__ == "__main__":
-    df_results = generate_security_data(DOMAINS)
-    chart_base64 = create_dashboard(df_results)
-    export_html_report(df_results, chart_base64)
+    try:
+        # El script ahora lee los dominios desde el archivo de texto
+        lista_dominios = cargar_dominios()
+        print(f"Se han cargado {len(lista_dominios)} dominios para auditar.")
+        
+        df_results = generate_security_data(lista_dominios)
+        chart_base64 = create_dashboard(df_results)
+        export_html_report(df_results, chart_base64)
+        
+    except FileNotFoundError as e:
+        print(e)
+    except Exception as e:
+        print(f"Error inesperado durante la ejecución: {e}")
