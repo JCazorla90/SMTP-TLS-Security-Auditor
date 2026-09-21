@@ -34,13 +34,6 @@ def check_dns_records(domain, record_type):
         return []
 
 def evaluate_email_protections(domain):
-    """
-    Evalúa los mecanismos de protección de correo:
-    - SPF: Servidores IP autorizados para enviar correo.
-    - DKIM: Firma digital criptográfica de autenticidad.
-    - DMARC: Políticas de alineación y reporte.
-    - MTA-STS y TLS-RPT: Seguridad estricta y reporte de fallos en tránsito.
-    """
     email_sec = {
         "SPF": "No",
         "DKIM": "No",
@@ -48,7 +41,6 @@ def evaluate_email_protections(domain):
         "MTA-STS": "No",
         "TLS-RPT": "No"
     }
-    
     try:
         txt_records = check_dns_records(domain, 'TXT')
         if any("v=spf1" in txt for txt in txt_records):
@@ -62,7 +54,7 @@ def evaluate_email_protections(domain):
         if dkim_records or any("k=rsa" in txt for txt in txt_records):
             email_sec["DKIM"] = "Sí"
         else:
-            email_sec["DKIM"] = "Verificar"
+            email_sec["DKIM"] = "Verif."
             
         mtasts_records = check_dns_records(f"_mta-sts.{domain}", 'TXT')
         if any("v=STSv1" in txt for txt in mtasts_records):
@@ -77,7 +69,6 @@ def evaluate_email_protections(domain):
     return email_sec
 
 def evaluate_smtp_tls(mx_host):
-    """Evalúa la conexión STARTTLS y extrae protocolo, cipher suite y bits."""
     try:
         server = smtplib.SMTP(mx_host, 25, timeout=10)
         server.ehlo()
@@ -95,7 +86,6 @@ def evaluate_smtp_tls(mx_host):
 # 3. MÓDULOS DE AUDITORÍA: NAVEGACIÓN WEB, CERTIFICADOS Y CSP
 # ==============================================================================
 def evaluate_certificate_health(domain):
-    """Inspecciona la salud del certificado (validez, caducidad y autofirmados)."""
     cert_results = {
         "Cert Válido": "No",
         "Días Exp": 0,
@@ -107,7 +97,6 @@ def evaluate_certificate_health(domain):
         with socket.create_connection((domain, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
                 cert = ssock.getpeercert()
-                
                 not_after_str = cert.get('notAfter')
                 if not_after_str:
                     exp_date = datetime.strptime(not_after_str, '%b %d %H:%M:%S %Y %Z')
@@ -122,16 +111,14 @@ def evaluate_certificate_health(domain):
                 issuer = dict(x[0] for x in cert.get('issuer', []))
                 if subject == issuer:
                     cert_results["Autofirmado"] = "Sí"
-                    cert_results["Estado"] = "Autofirmado"
                 else:
                     cert_results["Autofirmado"] = "No"
     except Exception:
-        cert_results["Estado"] = "Error Conexión"
+        pass
         
     return cert_results
 
 def evaluate_web_security_and_csp(domain):
-    """Evalúa HTTPS, HSTS y aísla Content Security Policy (CSP)."""
     web_results = {
         "HTTPS": "No",
         "CSP": "No",
@@ -163,15 +150,13 @@ def evaluate_web_security_and_csp(domain):
 def generate_security_data(domains):
     results = []
     for domain in domains:
-        print(f"Procesando auditoría integral para: {domain}...")
+        print(f"Analizando: {domain}...")
         
-        # Bloque Correo
         mx_records = check_dns_records(domain, 'MX')
         mx_host = mx_records[0].split()[1].rstrip('.') if mx_records else None
         proto, cipher, bits = evaluate_smtp_tls(mx_host) if mx_host else ("N/A", "N/A", 0)
         email_sec = evaluate_email_protections(domain)
         
-        # Bloque Web y Certificados
         cert_sec = evaluate_certificate_health(domain)
         web_sec = evaluate_web_security_and_csp(domain)
         
@@ -211,61 +196,85 @@ def generate_security_data(domains):
     return pd.DataFrame(results)
 
 # ==============================================================================
-# 5. GENERACIÓN DE GRÁFICO Y REPORTE PDF NATIVO
+# 5. GENERACIÓN DE GRÁFICO Y REPORTE PDF PROFESIONAL
 # ==============================================================================
 def create_dashboard_image(df):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 3.6))
     
     protocol_counts = df['Protocolo TLS'].value_counts()
-    ax1.pie(protocol_counts, labels=protocol_counts.index, autopct='%1.1f%%', colors=['#4CAF50', '#F44336', '#FFC107'])
-    ax1.set_title('Protocolos TLS (Correo)')
+    ax1.pie(protocol_counts, labels=protocol_counts.index, autopct='%1.1f%%', colors=['#003366', '#4CAF50', '#FFC107'])
+    ax1.set_title('Protocolos TLS (Correo)', fontsize=10, fontweight='bold', color='#003366')
     
     df_sorted = df.sort_values('Score', ascending=True)
     colors = ['#F44336' if s < 60 else '#FFC107' if s < 90 else '#4CAF50' for s in df_sorted['Score']]
     ax2.barh(df_sorted['Dominio'], df_sorted['Score'], color=colors)
-    ax2.set_title('Security Score Global (0-100)')
+    ax2.set_title('Security Score Global (0-100)', fontsize=10, fontweight='bold', color='#003366')
     ax2.set_xlim(0, 100)
+    ax2.tick_params(axis='y', labelsize=8)
     
     plt.tight_layout()
     chart_path = "temp_chart.png"
-    plt.savefig(chart_path, format='png', dpi=150)
+    plt.savefig(chart_path, format='png', dpi=200)
     plt.close()
     return chart_path
 
 def export_pdf_report(df, chart_path, pdf_path):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
     
-    # Cabecera
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 8, "Informe de Auditoria Integral de Ciberseguridad", ln=True, align='C')
-    pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 5, f"Fecha de escaneo: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    # --- CABECERA EJECUTIVA ---
+    pdf.set_font("Arial", 'B', 15)
+    pdf.set_text_color(0, 51, 102) # Azul corporativo
+    pdf.cell(0, 7, "INFORME DE AUDITORÍA INTEGRAL DE CIBERSEGURIDAD", ln=True, align='C')
+    
+    pdf.set_font("Arial", '', 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Estado perimetral y normativo", ln=True, align='C')
     pdf.ln(2)
     
-    # Gráfico Dashboard
+    # --- DASHBOARD GRÁFICO ---
     if os.path.exists(chart_path):
-        pdf.image(chart_path, x=65, y=20, w=150)
-        pdf.ln(58)
+        pdf.image(chart_path, x=58, y=22, w=160)
+        pdf.ln(54)
         
-    # Título Tabla
+    # --- TÍTULO DE SECCIÓN ---
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(0, 5, "Resumen Consolidado: [1] Protecciones Correo (SPF, DKIM, DMARC, MTA-STS, TLS-RPT) | [2] Web, Certificados y CSP", ln=True)
-    pdf.set_font("Arial", 'B', 6)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 5, "Detalle Consolidado: [1] Protecciones de Correo y DNS  |  [2] Navegación Web, Certificados y CSP", ln=True)
+    pdf.ln(1)
     
+    # --- TABLA DE DATOS MAQUETADA ---
     columns = list(df.columns)
-    # Anchos óptimos para formato horizontal A4 (~277 mm útiles para 17 columnas)
-    col_widths = [26, 32, 16, 28, 14, 10, 10, 12, 14, 14, 12, 16, 12, 16, 12, 12, 11]
+    # Anchos óptimos distribuidos para los 277 mm útiles de A4 Landscape
+    col_widths = [26, 32, 16, 26, 14, 10, 10, 12, 14, 14, 12, 16, 12, 16, 12, 12, 11]
+    
+    # Cabecera de la tabla
+    pdf.set_font("Arial", 'B', 6.5)
+    pdf.set_fill_color(0, 51, 102) # Fondo Azul Marino
+    pdf.set_text_color(255, 255, 255) # Texto Blanco
     
     for i, col in enumerate(columns):
-        pdf.cell(col_widths[i], 6, col, border=1, align='C')
+        pdf.cell(col_widths[i], 6, col, border=1, fill=True, align='C')
     pdf.ln()
     
+    # Filas de datos con Zebra Striping (colores alternos)
     pdf.set_font("Arial", '', 6)
+    pdf.set_text_color(50, 50, 50)
+    
+    fill = False
     for _, row in df.iterrows():
+        if fill:
+            pdf.set_fill_color(245, 247, 250) # Gris muy suave
+        else:
+            pdf.set_fill_color(255, 255, 255) # Blanco
+            
         for i, col in enumerate(columns):
-            pdf.cell(col_widths[i], 5, str(row[col]), border=1, align='C')
+            # Centrar textos cortos y alinear dominios a la izquierda si es necesario
+            align = 'L' if i == 0 else 'C'
+            pdf.cell(col_widths[i], 5, str(row[col]), border=1, fill=True, align=align)
         pdf.ln()
+        fill = not fill
         
     pdf.output(pdf_path)
     print(f"Reporte PDF generado exitosamente: {pdf_path}")
