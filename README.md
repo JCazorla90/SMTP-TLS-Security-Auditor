@@ -62,26 +62,29 @@ pip install dnspython pandas matplotlib fpdf2 requests
 
 ## ⚙️ Usage
 
-1. Clone the repository:
+1. Clona o sitúate en el directorio del proyecto:
    ```bash
    git clone <your-repository-url>
    cd <your-repository-directory>
    ```
 
-2. Create a dominios.txt file in the root directory and add the domains you want to audit (one per line):
+2. Crea un archivo de texto plano llamado dominios.txt en la misma carpeta e introduce los dominios a auditar (uno por línea):
    ```
    bmw.com
    marca.com
    hobbyconsolas.com
    eltiempo.com
    ```
+(Opcional) Crea archivos whitelist.txt y blacklist.txt para aplicar tus propias reglas de confianza o exclusión.
 
-3. Run the script:
+3. Ejecuta el script de auditoría:
    ```bash
    python generador_reporte_tls.py
    ```
 
-4. **View the Results:** Open the generated `reporte_seguridad_smtp.html` or `reporte_seguridad_smtp.pdf` file in any modern web browser to view the security score distribution and detailed compliance table.
+4. **View the Results:** Al finalizar la ejecución silenciosa en consola, se mostrarán las rutas absolutas de los ficheros generados listos para su revisión:
+5. ```
+   informe listo puedes verlo en C:\...\reporte_seguridad_20260921_153000.pdf y C:\...\reporte_seguridad_20260921_153000.html
 
 
 
