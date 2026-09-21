@@ -26,7 +26,7 @@ def animar_progreso_tecnico(stop_event):
         sys.stdout.flush()
         time.sleep(0.08)
         i += 1
-    # Limpia la línea de estado al terminar sin mostrar mensajes molestos
+    # Limpia la línea de estado al terminar de forma limpia
     sys.stdout.write("\r" + " " * 120 + "\r")
     sys.stdout.flush()
 
@@ -275,7 +275,7 @@ def export_pdf_report(df, chart_path, pdf_path):
     # --- BLOQUE DE PORTADA / TÍTULO EJECUTIVO ---
     pdf.set_font("Arial", 'B', 15)
     pdf.set_text_color(15, 32, 67)
-    pdf.cell(0, 7, "INFORME DE AUDITORÍA PERIMETRAL DE ACTIVOS", ln=True, align='L')
+    pdf.cell(0, 8, "INFORME DE AUDITORÍA PERIMETRAL DE ACTIVOS", ln=True, align='L')
     
     pdf.set_font("Arial", '', 8)
     pdf.set_text_color(100, 100, 100)
@@ -285,7 +285,7 @@ def export_pdf_report(df, chart_path, pdf_path):
     
     # --- DASHBOARD GRÁFICO ---
     if os.path.exists(chart_path):
-        pdf.image(chart_path, x=58, y=24, w=160)
+        pdf.image(chart_path, x=58, y=25, w=160)
         pdf.ln(54)
         
     # --- TÍTULO DE SECCIÓN ---
@@ -322,11 +322,12 @@ def export_pdf_report(df, chart_path, pdf_path):
         pdf.ln()
         fill = not fill
 
-    # --- GLOSARIO TÉCNICO ---
+    # --- GLOSARIO TÉCNICO (Formato optimizado con write para evitar saltos raros) ---
     pdf.ln(4)
     pdf.set_font("Arial", 'B', 9)
     pdf.set_text_color(15, 32, 67)
     pdf.cell(0, 5, "Glosario Técnico de Términos Evaluados", ln=True)
+    pdf.ln(1)
     
     glosario_items = [
         ("SPF", "Sender Policy Framework: Registro DNS TXT que define qué servidores IP están autorizados a enviar correo en nombre del dominio."),
@@ -338,15 +339,14 @@ def export_pdf_report(df, chart_path, pdf_path):
         ("HSTS", "HTTP Strict Transport Security: Directiva web que fuerza al navegador a comunicarse exclusivamente mediante HTTPS.")
     ]
     
-    pdf.set_font("Arial", 'B', 6.5)
     for termino, descripcion in glosario_items:
+        pdf.set_font("Arial", 'B', 6.5)
         pdf.set_text_color(15, 32, 67)
-        pdf.cell(18, 4, f"- {termino}:", border=0, align='L')
+        pdf.write(4, f"- {termino}: ")
         pdf.set_font("Arial", '', 6.5)
         pdf.set_text_color(80, 80, 80)
-        pdf.cell(250, 4, descripcion, ln=True, align='L')
-        pdf.set_font("Arial", 'B', 6.5)
-        
+        pdf.write(4, f"{descripcion}\n")
+    
     pdf.output(pdf_path)
     
     if os.path.exists(chart_path):
@@ -365,7 +365,7 @@ if __name__ == "__main__":
         df_results = generate_security_data(lista_dominios)
         chart_path = create_dashboard_image(df_results)
         
-        # Generar nombre del PDF con marca de tiempo para evitar sobrescribir
+        # Generar nombre del PDF con marca de tiempo única para evitar sobrescribir
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         pdf_output = f"reporte_seguridad_{timestamp_str}.pdf"
         
@@ -373,6 +373,9 @@ if __name__ == "__main__":
         
         stop_animation.set()
         hilo_animacion.join()
+        
+        # Mensaje de finalización solicitado por el usuario con la ruta del archivo generado
+        print(f"informe listo puedes verlo en {os.path.abspath(pdf_output)}")
         
     except FileNotFoundError as e:
         stop_animation.set()
