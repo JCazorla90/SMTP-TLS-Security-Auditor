@@ -28,11 +28,12 @@ pip install dnspython pandas matplotlib jinja2
    cd <your-repository-directory>
    ```
 
-2. Edit the `DOMAINS` list in `generador_reporte_tls.py` to include the domains you want to audit:
-   ```python
-   DOMAINS = [
-       "bmw.com", "marca.com", "hobbyconsolas.com", "eltiempo.com"
-   ]
+2. ECreate a dominios.txt file in the root directory and add the domains you want to audit (one per line):
+   ```
+   bmw.com
+   marca.com
+   hobbyconsolas.com
+   eltiempo.com
    ```
 
 3. Run the script:
@@ -46,4 +47,6 @@ pip install dnspython pandas matplotlib jinja2
 
 ## 📄 License
 
+Copyright (c) 2026 José Cazorla Gijón
 
+This software is provided "as is", without warranty of any kind. If you use, modify, or distribute any part of this code, you must include a clear attribution explicitly naming José Cazorla Gijón as the original author.
