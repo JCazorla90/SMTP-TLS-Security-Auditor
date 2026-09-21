@@ -12,7 +12,7 @@ from io import BytesIO
 from datetime import datetime
 
 # ==============================================================================
-# CONFIGURACIÓN EXTERNA (Cumplimiento DSA: Carga desde fichero)
+# 1. CONFIGURACIÓN EXTERNA (Carga de dominios desde fichero)
 # ==============================================================================
 def cargar_dominios(ruta_fichero="dominios.txt"):
     """Lee la lista de dominios desde un archivo externo para evitar hardcoding."""
@@ -26,7 +26,7 @@ def cargar_dominios(ruta_fichero="dominios.txt"):
         return [linea.strip() for linea in archivo if linea.strip()]
 
 # ==============================================================================
-# MÓDULOS DE AUDITORÍA: CORREO (SMTP/TLS & DNS)
+# 2. MÓDULOS DE AUDITORÍA: CORREO ELECTRÓNICO Y DNS (APARTADO 1)
 # ==============================================================================
 def check_dns_records(domain, record_type):
     try:
@@ -36,6 +36,7 @@ def check_dns_records(domain, record_type):
         return []
 
 def evaluate_smtp_tls(mx_host):
+    """Evalúa la conexión STARTTLS y extrae la suite criptográfica del servidor de correo."""
     try:
         server = smtplib.SMTP(mx_host, 25, timeout=10)
         server.ehlo()
@@ -50,101 +51,88 @@ def evaluate_smtp_tls(mx_host):
         return "Fallo", str(e), 0
 
 # ==============================================================================
-# MÓDULOS DE AUDITORÍA: SALUD DE CERTIFICADOS Y VULNERABILIDADES (HTTPS/SSL)
+# 3. MÓDULOS DE AUDITORÍA: NAVEGACIÓN WEB, CERTIFICADOS Y CABECERAS (APARTADO 2)
 # ==============================================================================
-def evaluate_certificate_and_vulnerabilities(domain):
-    """
-    Inspecciona la salud del certificado (validez, caducidad, emisor) 
-    y evalúa vulnerabilidades (como soporte a protocolos obsoletos o Heartbleed).
-    """
+def evaluate_certificate_health(domain):
+    """Inspecciona la salud del certificado (validez, caducidad, emisor y autofirmados)."""
     cert_results = {
-        "Certificado Válido": "❌",
-        "Días para Expirar": 0,
+        "Cert. Válido": "❌",
+        "Días Expiración": 0,
         "Autofirmado": "Sí",
-        "Vulnerabilidades / Alertas": "Ninguna detectada"
+        "Alertas Certificado": "Ninguna"
     }
-    
     try:
         context = ssl.create_default_context()
         with socket.create_connection((domain, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
                 cert = ssock.getpeercert()
                 
-                # 1. Análisis de fechas de expiración
+                # Fechas de expiración
                 not_after_str = cert.get('notAfter')
                 if not_after_str:
-                    # Formato típico: 'May  5 12:00:00 2027 GMT'
                     exp_date = datetime.strptime(not_after_str, '%b %d %H:%M:%S %Y %Z')
                     dias_restantes = (exp_date - datetime.utcnow()).days
-                    cert_results["Días para Expirar"] = dias_restantes
-                    
+                    cert_results["Días Expiración"] = dias_restantes
                     if dias_restantes > 0:
-                        cert_results["Certificado Válido"] = "✅"
+                        cert_results["Cert. Válido"] = "✅"
                     else:
-                        cert_results["Vulnerabilidades / Alertas"] = "Certificado CADUCADO"
+                        cert_results["Alertas Certificado"] = "CADUCADO"
                 
-                # 2. Comprobación de Emisor / Autofirmado
+                # Emisor / Autofirmado
                 subject = dict(x[0] for x in cert.get('subject', []))
                 issuer = dict(x[0] for x in cert.get('issuer', []))
-                
                 if subject == issuer:
                     cert_results["Autofirmado"] = "Sí (Inseguro)"
-                    cert_results["Vulnerabilidades / Alertas"] = "Certificado Autofirmado detectado"
+                    cert_results["Alertas Certificado"] = "Autofirmado detectado"
                 else:
                     cert_results["Autofirmado"] = "No (CA Confiable)"
-
-                # 3. Verificación de vulnerabilidades a protocolos obsoletos (ej. simulación TLS < 1.2)
-                # Intento de conexión con contexto inseguro para ver si acepta versiones antiguas (Riesgo)
-                insecure_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                insecure_context.check_hostname = False
-                insecure_context.verify_mode = ssl.CERT_NONE
-                
     except Exception as e:
-        cert_results["Vulnerabilidades / Alertas"] = f"Error de conexión TLS: {str(e)[:30]}"
+        cert_results["Alertas Certificado"] = f"Error TLS: {str(e)[:25]}"
         
     return cert_results
 
-def evaluate_web_security(domain):
+def evaluate_web_security_headers(domain):
+    """Evalúa HTTPS y cabeceras de seguridad perimetral (HSTS, CSP, X-Frame, X-Content)."""
     web_results = {
-        "HTTPS Soportado": "❌",
+        "HTTPS Web": "❌",
         "TLS Web": "N/A",
         "HSTS": "❌",
         "CSP": "❌",
-        "X-Frame-Options": "❌"
+        "X-Frame": "❌",
+        "X-Content": "❌"
     }
     try:
+        # 1. Comprobar HTTPS
         context = ssl.create_default_context()
         with socket.create_connection((domain, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
-                web_results["HTTPS Soportado"] = "✅"
+                web_results["HTTPS Web"] = "✅"
                 web_results["TLS Web"] = ssock.version()
         
+        # 2. Comprobar Security Headers
         conn = http.client.HTTPSConnection(domain, timeout=5)
         conn.request("GET", "/")
         res = conn.getresponse()
         headers = {k.lower(): v for k, v in res.getheaders()}
         
-        if "strict-transport-security" in headers:
-            web_results["HSTS"] = "✅"
-        if "content-security-policy" in headers:
-            web_results["CSP"] = "✅"
-        if "x-frame-options" in headers:
-            web_results["X-Frame-Options"] = "✅"
-            
+        if "strict-transport-security" in headers: web_results["HSTS"] = "✅"
+        if "content-security-policy" in headers: web_results["CSP"] = "✅"
+        if "x-frame-options" in headers: web_results["X-Frame"] = "✅"
+        if "x-content-type-options" in headers: web_results["X-Content"] = "✅"
     except Exception:
         pass
         
     return web_results
 
 # ==============================================================================
-# PROCESAMIENTO GLOBAL DE SEGURIDAD Y SCORING
+# 4. PROCESAMIENTO INTEGRAL Y CÁLCULO DE SCORE GLOBAL
 # ==============================================================================
 def generate_security_data(domains):
     results = []
     for domain in domains:
-        print(f"Analizando seguridad integral y certificados de {domain}...")
+        print(f"Auditando dominios de correo y web para: {domain}...")
         
-        # 1. DNS (SPF / DMARC)
+        # --- APARTADO 1: CORREO Y DNS ---
         mx_records = check_dns_records(domain, 'MX')
         mx_host = mx_records[0].split()[1].rstrip('.') if mx_records else None
         
@@ -154,48 +142,47 @@ def generate_security_data(domains):
         dmarc_records = check_dns_records(f"_dmarc.{domain}", 'TXT')
         dmarc_pass = any("v=DMARC1" in txt for txt in dmarc_records)
         
-        # 2. SMTP (Correo)
         proto, cipher, bits = evaluate_smtp_tls(mx_host) if mx_host else ("N/A", "N/A", 0)
         
-        # 3. Web & Certificados (Salud y Vulnerabilidades)
-        web_sec = evaluate_web_security(domain)
-        cert_sec = evaluate_certificate_and_vulnerabilities(domain)
+        # --- APARTADO 2: NAVEGACIÓN WEB, CERTIFICADOS Y CABECERAS ---
+        cert_sec = evaluate_certificate_health(domain)
+        web_sec = evaluate_web_security_headers(domain)
         
-        # 4. Cálculo de Puntuación Global (Score 0-100)
-        tls_mail_ok = proto in ["TLSv1.2", "TLSv1.3"]
-        bits_ok = bits >= 256
-        https_ok = web_sec["HTTPS Soportado"] == "✅"
-        cert_valid = cert_sec["Certificado Válido"] == "✅"
-        no_self_signed = "No" in cert_sec["Autofirmado"]
-        no_vulns = cert_sec["Vulnerabilidades / Alertas"] == "Ninguna detectada"
-        
+        # Ponderación de Scoring Global (0-100)
         score = 0
-        if tls_mail_ok: score += 20
-        if bits_ok: score += 15
+        if proto in ["TLSv1.2", "TLSv1.3"]: score += 20
+        if bits >= 256: score += 10
         if spf_pass: score += 10
         if dmarc_pass: score += 10
-        if https_ok: score += 10
-        if cert_valid: score += 15
-        if no_self_signed: score += 10
-        if no_vulns: score += 10
+        if web_sec["HTTPS Web"] == "✅": score += 10
+        if cert_sec["Cert. Válido"] == "✅": score += 15
+        if "No" in cert_sec["Autofirmado"]: score += 10
+        if web_sec["HSTS"] == "✅": score += 5
+        if web_sec["CSP"] == "✅": score += 5
+        if web_sec["X-Frame"] == "✅": score += 5
 
         results.append({
             "Dominio": domain,
+            # Bloque Correo
+            "MX Principal": mx_host if mx_host else "No encontrado",
             "TLS Correo": proto,
+            "Fuerza Bits": bits,
             "SPF": "✅" if spf_pass else "❌",
             "DMARC": "✅" if dmarc_pass else "❌",
-            "Cert. Válido": cert_sec["Certificado Válido"],
-            "Días Expiración": cert_sec["Días para Expirar"],
+            # Bloque Web y Certificados
+            "HTTPS Web": web_sec["HTTPS Web"],
+            "Cert. Válido": cert_sec["Cert. Válido"],
+            "Días Exp.": cert_sec["Días Expiración"],
             "Autofirmado": cert_sec["Autofirmado"],
-            "Vulnerabilidades": cert_sec["Vulnerabilidades / Alertas"],
             "HSTS": web_sec["HSTS"],
+            "CSP": web_sec["CSP"],
             "Score Global": score
         })
     
     return pd.DataFrame(results)
 
 # ==============================================================================
-# GENERACIÓN DE DASHBOARD Y REPORTES (HTML y PDF)
+# 5. GENERACIÓN DE DASHBOARD Y REPORTES (HTML y PDF)
 # ==============================================================================
 def create_dashboard(df):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -205,9 +192,9 @@ def create_dashboard(df):
     ax1.set_title('Distribución de Protocolos TLS (Correo)')
     
     df_sorted = df.sort_values('Score Global', ascending=True)
-    colors = ['#F44336' if score < 60 else '#FFC107' if score < 90 else '#4CAF50' for score in df_sorted['Score Global']]
+    colors = ['#F44336' if s < 60 else '#FFC107' if s < 90 else '#4CAF50' for s in df_sorted['Score Global']]
     ax2.barh(df_sorted['Dominio'], df_sorted['Score Global'], color=colors)
-    ax2.set_title('Security Score Global (0-100)')
+    ax2.set_title('Security Score Global (Correo + Web) [0-100]')
     ax2.set_xlim(0, 100)
     
     plt.tight_layout()
@@ -223,30 +210,31 @@ def export_html_report(df, image_base64, output_path):
     <html>
     <head>
         <meta charset="utf-8">
-        <title>Reporte de Auditoría y Salud de Certificados</title>
+        <title>Reporte Integral de Ciberseguridad (Correo y Navegación Web)</title>
         <style>
             body {{ font-family: Arial, sans-serif; margin: 25px; color: #333; }}
             h1 {{ color: #003366; border-bottom: 2px solid #003366; padding-bottom: 8px; }}
-            table {{ border-collapse: collapse; width: 100%; margin-top: 15px; font-size: 11px; }}
-            th, td {{ border: 1px solid #ddd; padding: 7px; text-align: left; }}
+            h2 {{ color: #004080; margin-top: 25px; }}
+            table {{ border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 10px; }}
+            th, td {{ border: 1px solid #ddd; padding: 6px; text-align: left; }}
             th {{ background-color: #f2f2f2; color: #003366; }}
             .chart {{ margin-top: 20px; text-align: center; }}
             .footer {{ margin-top: 30px; font-size: 0.8em; color: #777; }}
         </style>
     </head>
     <body>
-        <h1>Auditoría Integral de Ciberseguridad, Certificados y Vulnerabilidades</h1>
+        <h1>Informe de Auditoría Integral de Ciberseguridad</h1>
         <p><strong>Fecha de escaneo:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         
         <div class="chart">
-            <img src="data:image/png;base64,{image_base64}" alt="Security Dashboard" style="max-width: 85%;">
+            <img src="data:image/png;base64,{image_base64}" alt="Security Dashboard" style="max-width: 80%;">
         </div>
 
-        <h2>Detalle de Salud de Certificados y Postura Perimetral</h2>
+        <h2>Resumen Consolidado de Dominios (Correo y Navegación Web)</h2>
         {df.to_html(index=False, classes='table', escape=False)}
         
         <div class="footer">
-            <p>Elaborado bajo directrices de arquitectura: Validación de validez de certificados, detección de autofirmados y control de vulnerabilidades criptográficas.</p>
+            <p>Informe estructurado en apartados diferenciados para Infraestructura de Correo (SMTP/TLS, SPF, DMARC) y Navegación Web (HTTPS, Certificados y Security Headers).</p>
         </div>
     </body>
     </html>
@@ -276,18 +264,18 @@ def export_pdf_report(html_file_path, pdf_file_path):
         print(f"Error al generar el PDF: {e}")
 
 # ==============================================================================
-# EJECUCIÓN PRINCIPAL
+# 6. EJECUCIÓN PRINCIPAL
 # ==============================================================================
 if __name__ == "__main__":
     try:
         lista_dominios = cargar_dominios()
-        print(f"Se han cargado {len(lista_dominios)} dominios para auditar.")
+        print(f"Se han cargado {len(lista_dominios)} dominios para auditoría integral.")
         
         df_results = generate_security_data(lista_dominios)
         chart_base64 = create_dashboard(df_results)
         
-        html_output = "reporte_certificados_vulnerabilidades.html"
-        pdf_output = "reporte_certificados_vulnerabilidades.pdf"
+        html_output = "reporte_integral_correo_web.html"
+        pdf_output = "reporte_integral_correo_web.pdf"
         
         export_html_report(df_results, chart_base64, html_output)
         export_pdf_report(html_output, pdf_output)
