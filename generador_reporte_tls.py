@@ -26,7 +26,9 @@ def animar_progreso_tecnico(stop_event):
         sys.stdout.flush()
         time.sleep(0.08)
         i += 1
-    sys.stdout.write(f"\r\033[92m✔ ¡Proceso finalizado correctamente!                                                          \033[0m\n")
+    # Limpia la línea de estado al terminar sin mostrar mensajes molestos
+    sys.stdout.write("\r" + " " * 120 + "\r")
+    sys.stdout.flush()
 
 # ==============================================================================
 # 2. CONFIGURACIÓN EXTERNA (Carga de dominios desde fichero)
@@ -226,12 +228,11 @@ def generate_security_data(domains):
     return pd.DataFrame(results)
 
 # ==============================================================================
-# 6. CLASE PDF PERSONALIZADA CON ESTILO EJECUTIVO (BITSIGHT STYLE)
+# 6. CLASE PDF PERSONALIZADA CON ESTILO EJECUTIVO
 # ==============================================================================
 class PDFReporteEjecutivo(FPDF):
     def header(self):
-        # Cabecera corporativa superior
-        self.set_fill_color(15, 32, 67) # Azul marino oscuro
+        self.set_fill_color(15, 32, 67)
         self.rect(0, 0, 297, 12, 'F')
         self.set_font('Arial', 'B', 8)
         self.set_text_color(255, 255, 255)
@@ -239,7 +240,6 @@ class PDFReporteEjecutivo(FPDF):
         self.ln(12)
 
     def footer(self):
-        # Pie de página formal
         self.set_y(-15)
         self.set_font('Arial', 'I', 7)
         self.set_text_color(120, 120, 120)
@@ -273,20 +273,20 @@ def export_pdf_report(df, chart_path, pdf_path):
     pdf.add_page()
     
     # --- BLOQUE DE PORTADA / TÍTULO EJECUTIVO ---
-    pdf.set_font("Arial", 'B', 16)
+    pdf.set_font("Arial", 'B', 15)
     pdf.set_text_color(15, 32, 67)
-    pdf.cell(0, 8, "INFORME DE AUDITORÍA PERIMETRAL DE ACTIVOS", ln=True, align='L')
+    pdf.cell(0, 7, "INFORME DE AUDITORÍA PERIMETRAL DE ACTIVOS", ln=True, align='L')
     
     pdf.set_font("Arial", '', 8)
     pdf.set_text_color(100, 100, 100)
     promedio_score = int(df['Score'].mean()) if not df.empty else 0
     pdf.cell(0, 5, f"Fecha de emisión: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  |  Score Promedio Global: {promedio_score}/100", ln=True, align='L')
-    pdf.ln(3)
+    pdf.ln(2)
     
     # --- DASHBOARD GRÁFICO ---
     if os.path.exists(chart_path):
-        pdf.image(chart_path, x=58, y=28, w=160)
-        pdf.ln(56)
+        pdf.image(chart_path, x=58, y=24, w=160)
+        pdf.ln(54)
         
     # --- TÍTULO DE SECCIÓN ---
     pdf.set_font("Arial", 'B', 9)
@@ -298,7 +298,6 @@ def export_pdf_report(df, chart_path, pdf_path):
     columns = list(df.columns)
     col_widths = [26, 32, 16, 26, 14, 10, 10, 12, 14, 14, 12, 16, 12, 16, 12, 12, 11]
     
-    # Cabecera de tabla
     pdf.set_font("Arial", 'B', 6.5)
     pdf.set_fill_color(15, 32, 67)
     pdf.set_text_color(255, 255, 255)
@@ -307,7 +306,6 @@ def export_pdf_report(df, chart_path, pdf_path):
         pdf.cell(col_widths[i], 6, col, border=1, fill=True, align='C')
     pdf.ln()
     
-    # Filas con Zebra Striping
     pdf.set_font("Arial", '', 6)
     pdf.set_text_color(50, 50, 50)
     
@@ -367,13 +365,14 @@ if __name__ == "__main__":
         df_results = generate_security_data(lista_dominios)
         chart_path = create_dashboard_image(df_results)
         
-        pdf_output = "reporte_seguridad_integral.pdf"
+        # Generar nombre del PDF con marca de tiempo para evitar sobrescribir
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_output = f"reporte_seguridad_{timestamp_str}.pdf"
+        
         export_pdf_report(df_results, chart_path, pdf_output)
         
         stop_animation.set()
         hilo_animacion.join()
-        
-        print(f"\n✔ ¡Informe PDF de calidad ejecutiva generado con éxito: {pdf_output}!")
         
     except FileNotFoundError as e:
         stop_animation.set()
